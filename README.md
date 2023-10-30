@@ -10,7 +10,7 @@ A raytracer in cuda that can run in a colab notebook
 ```
 
 ```
-!nvcc cuda-raytrace/src/poc.cu -o poc
+!nvcc cuda-raytrace/src/poc.cu -lcurand -o poc
 ```
 
 ```
