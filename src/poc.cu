@@ -45,7 +45,10 @@ int main(int argc, char *argv[])
 
     /* Show result */
     for(i = 0; i < n; i++) {
-        printf("%1.4f,", hostData[i]);
+        if (i != 0) {
+            printf(",");
+        }
+        printf("%1.4f", hostData[i]);
     }
     printf("\n");
 
