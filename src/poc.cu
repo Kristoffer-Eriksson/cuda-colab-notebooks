@@ -17,7 +17,10 @@
 
 int main(int argc, char *argv[])
 {
-    size_t n = 10000;
+    size_t width = 800;
+    size_t height = 600;
+
+    size_t n = width * height * 3; // 800x600 RGB DATA
     size_t i;
     curandGenerator_t gen;
     float *devData, *hostData;
@@ -44,11 +47,14 @@ int main(int argc, char *argv[])
         cudaMemcpyDeviceToHost));
 
     /* Show result */
-    for(i = 0; i < n; i++) {
+    for(i = 0; i < width * height; i++) {
         if (i != 0) {
             printf(",");
         }
-        printf("%1.4f", hostData[i]);
+        printf("%02hhX%02hhX%02hhX",
+               (unsigned char)(255 * hostData[3 * i]),
+               (unsigned char)(255 * hostData[3 * i + 1]),
+               (unsigned char)(255 * hostData[3 * i + 2]));
     }
     printf("\n");
 
