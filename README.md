@@ -5,7 +5,8 @@ A raytracer in cuda that can run in a colab notebook
 ## Run the POC in colab
 
 ```
-!git clone https://github.com/Kristoffer-Eriksson/cuda-raytrace.git
+!rm -rf cuda-raytrace
+!git clone --depth 1 https://github.com/Kristoffer-Eriksson/cuda-raytrace.git
 ```
 
 ```
