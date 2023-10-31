@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 {
     if (argc != 2) {
         std::cout << "Usage: poc.exe <output_path.jpg>" << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     size_t width = 800;
@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
 
     if (error != cudaSuccess) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " error = " << error << std::endl;
+        return EXIT_FAILURE;
     }
 
     dummy_rgb_data<<<1,1>>>(rgb_data, width, height);
@@ -53,6 +54,7 @@ int main(int argc, char *argv[])
     status = nvjpegCreateSimple(&nvjpeg_handle);
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     /* Create stream */
@@ -64,6 +66,7 @@ int main(int argc, char *argv[])
     status = nvjpegEncoderStateCreate(nvjpeg_handle, &nv_enc_state, stream);
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     /* Set JPEG parameters */
@@ -71,21 +74,25 @@ int main(int argc, char *argv[])
     status = nvjpegEncoderParamsCreate(nvjpeg_handle, &params, stream);
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     status = nvjpegEncoderParamsSetQuality(params, 100, stream);
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     status = nvjpegEncoderParamsSetOptimizedHuffman(params, 0, stream);
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     status = nvjpegEncoderParamsSetSamplingFactors(params, NVJPEG_CSS_444, stream);
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     /* Set image parameters */
@@ -99,6 +106,7 @@ int main(int argc, char *argv[])
 
     if (status != NVJPEG_STATUS_SUCCESS) {
         std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+        return EXIT_FAILURE;
     }
 
     cudaStreamSynchronize(stream);
