@@ -6,61 +6,125 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
-#include <curand.h>
+#include <nvjpeg.h>
+#include <vector>
+#include <fstream>
+#include <iostream>
 
-#define CUDA_CALL(x) do { if((x)!=cudaSuccess) { \
-    printf("Error at %s:%d\n",__FILE__,__LINE__);\
-    return EXIT_FAILURE;}} while(0)
-#define CURAND_CALL(x) do { if((x)!=CURAND_STATUS_SUCCESS) { \
-    printf("Error at %s:%d\n",__FILE__,__LINE__);\
-    return EXIT_FAILURE;}} while(0)
+__global__ void dummy_rgb_data(unsigned char *rgb_data, size_t width, size_t height) {
+    for(int i = 0; i < width * height; i++){
+        rgb_data[3 * i + 0] = 255;
+        rgb_data[3 * i + 1] = 0;
+        rgb_data[3 * i + 2] = 0;
+    }
+}
 
 int main(int argc, char *argv[])
 {
+    if (argc != 2) {
+        std::cout << "Usage: poc.exe <output_path.jpg>" << std::endl;
+        return 1;
+    }
+
     size_t width = 800;
     size_t height = 600;
 
-    size_t n = width * height * 3; // 800x600 RGB DATA
-    size_t i;
-    curandGenerator_t gen;
-    float *devData, *hostData;
+    /** Generate image **/
 
-    /* Allocate n floats on host */
-    hostData = (float *)calloc(n, sizeof(float));
+    cudaError_t error;
+
+    unsigned char * rgb_data;
 
     /* Allocate n floats on device */
-    CUDA_CALL(cudaMalloc((void **)&devData, n*sizeof(float)));
+    error = cudaMalloc((void **)&rgb_data, width * height * 3 * sizeof(unsigned char));
 
-    /* Create pseudo-random number generator */
-    CURAND_CALL(curandCreateGenerator(&gen,
-                CURAND_RNG_PSEUDO_DEFAULT));
-
-    /* Set seed */
-    CURAND_CALL(curandSetPseudoRandomGeneratorSeed(gen,
-                1234ULL));
-
-    /* Generate n floats on device */
-    CURAND_CALL(curandGenerateUniform(gen, devData, n));
-
-    /* Copy device memory to host */
-    CUDA_CALL(cudaMemcpy(hostData, devData, n * sizeof(float),
-        cudaMemcpyDeviceToHost));
-
-    /* Show result */
-    for(i = 0; i < width * height; i++) {
-        if (i != 0) {
-            printf(",");
-        }
-        printf("%02hhX%02hhX%02hhX",
-               (unsigned char)(255 * hostData[3 * i]),
-               (unsigned char)(255 * hostData[3 * i + 1]),
-               (unsigned char)(255 * hostData[3 * i + 2]));
+    if (error != cudaSuccess) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " error = " << error << std::endl;
     }
-    printf("\n");
+
+    dummy_rgb_data<<<1,1>>>(rgb_data, width, height);
+
+    /** Encode as JPEG **/
+
+    nvjpegStatus_t status;
+
+    /* Create handle */
+    nvjpegHandle_t nvjpeg_handle;
+    status = nvjpegCreateSimple(&nvjpeg_handle);
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    /* Create stream */
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+
+    /* Create JPEG encoder state */
+    nvjpegEncoderState_t nv_enc_state;
+    status = nvjpegEncoderStateCreate(nvjpeg_handle, &nv_enc_state, stream);
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    /* Set JPEG parameters */
+    nvjpegEncoderParams_t params;
+    status = nvjpegEncoderParamsCreate(nvjpeg_handle, &params, stream);
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    status = nvjpegEncoderParamsSetQuality(params, 100, stream);
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    status = nvjpegEncoderParamsSetOptimizedHuffman(params, 0, stream);
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    status = nvjpegEncoderParamsSetSamplingFactors(params, NVJPEG_CSS_444, stream);
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    /* Set image parameters */
+    nvjpegImage_t source;
+    source.channel[0] = rgb_data;
+    source.pitch[0] = width * 3;
+
+    /* Encode the image */
+    status = nvjpegEncodeImage(nvjpeg_handle, nv_enc_state, params,
+        &source, NVJPEG_INPUT_RGB, width, height, stream);
+
+    if (status != NVJPEG_STATUS_SUCCESS) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    }
+
+    cudaStreamSynchronize(stream);
+
+    // get compressed stream size
+    size_t length;
+    status = nvjpegEncodeRetrieveBitstream(nvjpeg_handle, nv_enc_state, NULL, &length, stream);
+
+    // get stream itself
+    std::vector<unsigned char> jpeg(length);
+    status = nvjpegEncodeRetrieveBitstream(nvjpeg_handle, nv_enc_state, jpeg.data(), &length, stream);
+
+    // write stream to file
+    cudaStreamSynchronize(stream);
+    std::ofstream output_file(argv[1], std::ios::out | std::ios::binary);
+    output_file.write((char*)jpeg.data(), length);
+    output_file.close();
 
     /* Cleanup */
-    CURAND_CALL(curandDestroyGenerator(gen));
-    CUDA_CALL(cudaFree(devData));
-    free(hostData);
+    cudaFree(rgb_data);
+
+    nvjpegEncoderParamsDestroy(params);
+    nvjpegEncoderStateDestroy(nv_enc_state);
+    nvjpegDestroy(nvjpeg_handle);
+
+    cudaStreamDestroy(stream);
+
     return EXIT_SUCCESS;
 }
