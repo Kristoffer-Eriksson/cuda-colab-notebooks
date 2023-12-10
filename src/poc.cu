@@ -7,8 +7,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-__global__ void dummy_rgb_data(unsigned char *rgb_data, size_t width, size_t height) {
-    for(int i = 0; i < width * height; i++){
+__global__ void render(unsigned char *rgb_data, size_t width, size_t height) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (x < width && y < height) {
+        int index = y * width + x;
         rgb_data[3 * i + 0] = 255;
         rgb_data[3 * i + 1] = 0;
         rgb_data[3 * i + 2] = 0;
@@ -22,8 +26,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    size_t width = 800;
-    size_t height = 600;
+    size_t width = 256;
+    size_t height = 256;
 
     /** Generate image **/
 
@@ -39,7 +43,10 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    dummy_rgb_data<<<1,1>>>(rgb_data, width, height);
+    dim3 blockDim(16, 16);
+    dim3 gridDim((width + blockDim.x - 1) / blockDim.x, (height + blockDim.y - 1) / blockDim.y);
+
+    render<<<gridDim, blockDim>>>(rgb_data, width, height);
 
     /** Transfer data from GPU to CPU **/
 
