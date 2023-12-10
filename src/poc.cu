@@ -1,15 +1,10 @@
-
-/*
- * This program uses the host CURAND API to generate 10000
- * pseudorandom floats.
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
-#include <nvjpeg.h>
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include "stb_image_write.h"
 
 __global__ void dummy_rgb_data(unsigned char *rgb_data, size_t width, size_t height) {
     for(int i = 0; i < width * height; i++){
@@ -22,7 +17,7 @@ __global__ void dummy_rgb_data(unsigned char *rgb_data, size_t width, size_t hei
 int main(int argc, char *argv[])
 {
     if (argc != 2) {
-        std::cout << "Usage: poc.exe <output_path.jpg>" << std::endl;
+        std::cout << "Usage: poc.exe <output_path.png>" << std::endl;
         return EXIT_FAILURE;
     }
 
@@ -33,7 +28,7 @@ int main(int argc, char *argv[])
 
     cudaError_t error;
 
-    unsigned char * rgb_data;
+    unsigned char *rgb_data;
 
     /* Allocate n floats on device */
     error = cudaMalloc((void **)&rgb_data, width * height * 3 * sizeof(unsigned char));
@@ -45,94 +40,25 @@ int main(int argc, char *argv[])
 
     dummy_rgb_data<<<1,1>>>(rgb_data, width, height);
 
-    /** Encode as JPEG **/
+    /** Transfer data from GPU to CPU **/
 
-    nvjpegStatus_t status;
+    unsigned char *host_rgb_data = (unsigned char *)malloc(width * height * 3 * sizeof(unsigned char));
 
-    /* Create handle */
-    nvjpegHandle_t nvjpeg_handle;
-    status = nvjpegCreateSimple(&nvjpeg_handle);
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
+    error = cudaMemcpy(host_rgb_data, rgb_data, width * height * 3 * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+
+    if (error != cudaSuccess) {
+        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " error = " << error << std::endl;
         return EXIT_FAILURE;
     }
 
-    /* Create stream */
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
+    /** Save image as PNG **/
 
-    /* Create JPEG encoder state */
-    nvjpegEncoderState_t nv_enc_state;
-    status = nvjpegEncoderStateCreate(nvjpeg_handle, &nv_enc_state, stream);
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
-        return EXIT_FAILURE;
-    }
+    stbi_write_png(argv[1], width, height, 3, host_rgb_data, width * 3);
 
-    /* Set JPEG parameters */
-    nvjpegEncoderParams_t params;
-    status = nvjpegEncoderParamsCreate(nvjpeg_handle, &params, stream);
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
-        return EXIT_FAILURE;
-    }
+    /** Cleanup **/
 
-    status = nvjpegEncoderParamsSetQuality(params, 100, stream);
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    status = nvjpegEncoderParamsSetOptimizedHuffman(params, 0, stream);
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    status = nvjpegEncoderParamsSetSamplingFactors(params, NVJPEG_CSS_444, stream);
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    /* Set image parameters */
-    nvjpegImage_t source;
-    source.channel[0] = rgb_data;
-    source.pitch[0] = width * 3;
-
-    /* Encode the image */
-    status = nvjpegEncodeImage(nvjpeg_handle, nv_enc_state, params,
-        &source, NVJPEG_INPUT_RGB, width, height, stream);
-
-    if (status != NVJPEG_STATUS_SUCCESS) {
-        std::cerr << "Error " << __FILE__ << ":" << __LINE__ << " status = " << status << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    cudaStreamSynchronize(stream);
-
-    // get compressed stream size
-    size_t length;
-    status = nvjpegEncodeRetrieveBitstream(nvjpeg_handle, nv_enc_state, NULL, &length, stream);
-
-    // get stream itself
-    std::vector<unsigned char> jpeg(length);
-    status = nvjpegEncodeRetrieveBitstream(nvjpeg_handle, nv_enc_state, jpeg.data(), &length, stream);
-
-    // write stream to file
-    cudaStreamSynchronize(stream);
-    std::ofstream output_file(argv[1], std::ios::out | std::ios::binary);
-    output_file.write((char*)jpeg.data(), length);
-    output_file.close();
-
-    /* Cleanup */
     cudaFree(rgb_data);
-
-    nvjpegEncoderParamsDestroy(params);
-    nvjpegEncoderStateDestroy(nv_enc_state);
-    nvjpegDestroy(nvjpeg_handle);
-
-    cudaStreamDestroy(stream);
+    free(host_rgb_data);
 
     return EXIT_SUCCESS;
 }
