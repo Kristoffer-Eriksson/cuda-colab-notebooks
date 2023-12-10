@@ -13,9 +13,9 @@ __global__ void render(unsigned char *rgb_data, size_t width, size_t height) {
     
     if (x < width && y < height) {
         int index = y * width + x;
-        rgb_data[3 * i + 0] = 255;
-        rgb_data[3 * i + 1] = 0;
-        rgb_data[3 * i + 2] = 0;
+        rgb_data[3 * index + 0] = 255;
+        rgb_data[3 * index + 1] = 0;
+        rgb_data[3 * index + 2] = 0;
     }
 }
 
