@@ -4,6 +4,7 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 __global__ void dummy_rgb_data(unsigned char *rgb_data, size_t width, size_t height) {
